@@ -1,0 +1,10 @@
+modules = ["python-3.12"]
+run = "poetry run python chatbot.py"
+disableGuessImports = true
+
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["poetry run python chatbot.py"]

@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "cdp-agentkit-sample"
+version = "0.1.0"
+description = "A sample app that uses CDP AgentKit"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+cdp-langchain = "^0.0.6"
+cdp-agentkit-core = "^0.0.4"
+langchain-core = "^0.3.15"
+langchain-openai = "^0.2.6"
+langgraph = "^0.2.45"
+pydantic = "^2.9.2"
+cdp-sdk = "^0.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
