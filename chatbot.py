@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import requests
 
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
@@ -19,42 +20,163 @@ from twitter_langchain import (TwitterApiWrapper, TwitterToolkit)
 # Configure a file to persist the agent's CDP MPC Wallet Data.
 wallet_data_file = "wallet_data.txt"
 
+# Existing Multi-Token Deployment Prompt
 DEPLOY_MULTITOKEN_PROMPT = """
 This tool deploys a new multi-token contract with a specified base URI for token metadata.
 The base URI should be a template URL containing {id} which will be replaced with the token ID.
 For example: 'https://example.com/metadata/{id}.json'
 """
 
+# Token Metadata Prompts
+TOKEN_METADATA_PROMPT = """
+Fetch metadata for an ERC-20 token using the Moralis API. 
+Provides comprehensive information about a specific token, 
+including name, symbol, decimals, total supply, and verification status.
+"""
 
+TOKEN_PAIRS_PROMPT = """
+Retrieve trading pairs for a specific ERC-20 token on the Base blockchain.
+Returns detailed information about token trading pairs, including liquidity, 
+price, and exchange details.
+"""
+
+TOKEN_DETAILS_PROMPT = """
+Fetch comprehensive details about a specific ERC-20 token on the Base blockchain.
+Provides in-depth information including price, market cap, security score, 
+holders change, volume changes, and price performance.
+"""
+
+WALLET_TOKENS_PROMPT = """
+Retrieve a list of ERC-20 tokens held in the agent's wallet.
+Returns token balances, contract addresses, and current market information.
+"""
+
+WALLET_PNL_PROMPT = """
+Calculate and retrieve Profit and Loss (PnL) information for the agent's wallet assets.
+Provides detailed insights into token investments, realized profits, and average buy prices.
+"""
+
+# Input Models
 class DeployMultiTokenInput(BaseModel):
     """Input argument schema for deploy multi-token contract action."""
     base_uri: str = Field(
         ...,
-        description=
-        "The base URI template for token metadata. Must contain {id} placeholder.",
+        description="The base URI template for token metadata. Must contain {id} placeholder.",
         example="https://example.com/metadata/{id}.json")
 
+class TokenMetadataInput(BaseModel):
+    token_address: str = Field(
+        ..., 
+        description="Contract address of the ERC-20 token",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    )
 
+class TokenPairsInput(BaseModel):
+    token_address: str = Field(
+        ..., 
+        description="Contract address of the ERC-20 token to find trading pairs",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    )
+
+# Function definitions
 def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
-    """Deploy a new multi-token contract with the specified base URI.
-
-    Args:
-        wallet (Wallet): The wallet to deploy the contract from.
-        base_uri (str): The base URI template for token metadata. Must contain {id} placeholder.
-
-    Returns:
-        str: A message confirming deployment with the contract address.
-    """
-    # Validate that the base_uri contains the {id} placeholder
+    """Deploy a new multi-token contract with the specified base URI."""
     if "{id}" not in base_uri:
         raise ValueError("base_uri must contain {id} placeholder")
 
-    # Deploy the contract
     deployed_contract = wallet.deploy_multi_token(base_uri)
     result = deployed_contract.wait()
 
     return f"Successfully deployed multi-token contract at address: {result.contract_address}"
 
+def get_token_metadata(wallet, token_address: str) -> str:
+    """
+    Fetch metadata for an ERC-20 token using the Moralis API.
+    Automatically determines if the network is mainnet or testnet.
+    """
+    MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+    if not MORALIS_API_KEY:
+        return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY environment variable."
+
+    is_mainnet = wallet.network_id in ["base", "base-mainnet"]
+    chain = "base" if is_mainnet else "base sepolia"
+
+    url = "https://deep-index.moralis.io/api/v2.2/erc20/metadata"
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": MORALIS_API_KEY
+    }
+    params = {
+        "chain": chain,
+        "addresses[0]": token_address
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        metadata = response.json()
+
+        if metadata:
+            token_data = metadata[0]
+            return (
+                f"Token Name: {token_data.get('name')}\n"
+                f"Symbol: {token_data.get('symbol')}\n"
+                f"Decimals: {token_data.get('decimals')}\n"
+                f"Total Supply: {token_data.get('total_supply_formatted', 'N/A')}\n"
+                f"Contract Address: {token_data.get('address')}\n"
+                f"Verified: {token_data.get('verified_contract')}\n"
+                f"Logo URL: {token_data.get('logo', 'N/A')}\n"
+            )
+        else:
+            return "No metadata found for the provided token address."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching token metadata: {str(e)}"
+
+def get_token_pairs(wallet, token_address: str) -> str:
+    """
+    Fetch trading pairs for a specific ERC-20 token on the Base blockchain.
+    """
+    MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+    if not MORALIS_API_KEY:
+        return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY environment variable."
+
+    is_mainnet = wallet.network_id in ["base", "base-mainnet"]
+    chain = "base" if is_mainnet else "base sepolia"
+
+    url = f"https://deep-index.moralis.io/api/v2.2/erc20/{token_address}/pairs"
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": MORALIS_API_KEY
+    }
+    params = {
+        "chain": chain
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        pairs = response.json().get("pairs", [])
+
+        if pairs:
+            pairs_info = "\n".join(
+                [
+                    f"Pair: {pair['pair_label']}\n"
+                    f"Price (USD): {pair['usd_price']}\n"
+                    f"24hr Price Change (%): {pair['usd_price_24hr_percent_change']}\n"
+                    f"Liquidity (USD): {pair['liquidity_usd']}\n"
+                    f"Exchange Address: {pair['exchange_address']}\n"
+                    f"Base Token: {pair['pair'][0]['token_name']} ({pair['pair'][0]['token_symbol']})\n"
+                    f"Quote Token: {pair['pair'][1]['token_name']} ({pair['pair'][1]['token_symbol']})\n"
+                    for pair in pairs
+                ]
+            )
+            return f"Trading pairs for token {token_address}:\n{pairs_info}"
+        else:
+            return f"No trading pairs found for token {token_address}."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching token pairs: {str(e)}"
 
 def initialize_agent():
     """Initialize the agent with CDP Agentkit."""
@@ -87,17 +209,36 @@ def initialize_agent():
     twitter_toolkit = TwitterToolkit.from_twitter_api_wrapper(
         twitter_api_wrapper)
     tools.extend(twitter_toolkit.get_tools())
+
+    # Existing Multi-Token Deployment Tool
     deployMultiTokenTool = CdpTool(
         name="deploy_multi_token",
         description=DEPLOY_MULTITOKEN_PROMPT,
-        cdp_agentkit_wrapper=
-        agentkit,  # this should be whatever the instantiation of CdpAgentkitWrapper is
+        cdp_agentkit_wrapper=agentkit,
         args_schema=DeployMultiTokenInput,
         func=deploy_multi_token,
     )
 
-    # Add to tools list
-    tools.append(deployMultiTokenTool)
+    # Token Metadata Tool
+    tokenMetadataTool = CdpTool(
+        name="get_token_metadata",
+        description=TOKEN_METADATA_PROMPT,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=TokenMetadataInput,
+        func=get_token_metadata,
+    )
+
+    # Token Pairs Tool
+    tokenPairsTool = CdpTool(
+        name="get_token_pairs",
+        description=TOKEN_PAIRS_PROMPT,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=TokenPairsInput,
+        func=get_token_pairs,
+    )
+
+    # Add all tools to the tools list
+    tools.extend([deployMultiTokenTool, tokenMetadataTool, tokenPairsTool])
 
     # Store buffered conversation history in memory.
     memory = MemorySaver()
@@ -111,7 +252,6 @@ def initialize_agent():
         state_modifier=
         "You are a helpful agent that can interact onchain using the Coinbase Developer Platform Agentkit. You are empowered to interact onchain using your tools. If you ever need funds, you can request them from the faucet if you are on network ID `base-sepolia`. If not, you can provide your wallet details and request funds from the user. If someone asks you to do something you can't do with your currently available tools, you must say so, and encourage them to implement it themselves using the CDP SDK + Agentkit, recommend they go to docs.cdp.coinbase.com for more informaton. Be concise and helpful with your responses. Refrain from restating your tools' descriptions unless it is explicitly requested.",
     ), config
-
 
 # Autonomous Mode
 def run_autonomous_mode(agent_executor, config, interval=10):
@@ -197,3 +337,4 @@ def main():
 if __name__ == "__main__":
     print("Starting Agent...")
     main()
+
