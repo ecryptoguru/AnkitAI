@@ -36,12 +36,6 @@ Provides comprehensive information about a specific token,
 including name, symbol, decimals, total supply, and verification status.
 """
 
-TOKEN_PAIRS_PROMPT = """
-Retrieve trading pairs for a specific ERC-20 token on the Base blockchain.
-Returns detailed information about token trading pairs, including liquidity, 
-price, and exchange details.
-"""
-
 TOKEN_DETAILS_PROMPT = """
 Fetch comprehensive details about a specific ERC-20 token on the Base blockchain.
 Provides in-depth information including price, market cap, security score, 
@@ -49,8 +43,20 @@ holders change, volume changes, and price performance.
 """
 
 WALLET_TOKENS_PROMPT = """
-Retrieve a list of ERC-20 tokens held in the agent's wallet.
-Returns token balances, contract addresses, and current market information.
+Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API. 
+This action retrieves token balances, contract details, and optional USD price information.
+"""
+
+TOKEN_PAIRS_PROMPT = """
+Retrieve trading pairs for a specific ERC-20 token on the Base blockchain.
+Returns detailed information about token trading pairs, including liquidity, 
+price, and exchange details.
+"""
+
+TRENDING_TOKENS_PROMPT = """
+Discover trending tokens on the Base blockchain with optional 
+filtering by security score and market capitalization.
+Provides comprehensive information about top-performing tokens using the Moralis API.
 """
 
 WALLET_PNL_PROMPT = """
@@ -234,7 +240,7 @@ def get_wallet_tokens(token_address: str) -> str:
 
 def get_token_details(token_address: str) -> str:
     """
-    Fetch detailed information about a specific ERC-20 token on the Base blockchain.
+    Fetch detailed information about a specific ERC-20 token on the Base blockchain using MOralis API
     Automatically determines if the network is mainnet or testnet.
 
     Args:
@@ -248,7 +254,7 @@ def get_token_details(token_address: str) -> str:
     chain = "base" if is_mainnet else "base sepolia"
 
     # API endpoint and headers
-    url = f"https://deep-index.moralis.io/api/v2.2/discovery/token"
+    url = "https://deep-index.moralis.io/api/v2.2/discovery/token"
     headers = {
         "accept": "application/json",
         "X-API-Key": MORALIS_API_KEY
@@ -467,10 +473,7 @@ def initialize_agent():
     # Get Wallet Tokens Tool
     walletTokensTool = CdpTool(
         name="get_wallet_tokens",
-        description="""
-        Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API. 
-        This action retrieves token balances, contract details, and optional USD price information.
-        """,
+        description=WALLET_TOKENS_PROMPT,
         cdp_agentkit_wrapper=agentkit,
         args_schema=WalletTokensInput,
         func=get_wallet_tokens,
@@ -513,11 +516,7 @@ def initialize_agent():
     # Trending Tokens Tool
     trendingTokensTool = CdpTool(
         name="get_trending_tokens",
-        description="""
-        Discover trending tokens on the Base blockchain with optional 
-        filtering by security score and market capitalization.
-        Provides comprehensive information about top-performing tokens using the Moralis API.
-        """,
+        description=TRENDING_TOKENS_PROMPT,
         cdp_agentkit_wrapper=agentkit,
         args_schema=TrendingTokensInput,
         func=get_trending_tokens,
