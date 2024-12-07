@@ -1,10 +1,18 @@
 modules = ["python-3.12"]
-run = "poetry run python chatbot.py"
+# First install poetry, then install dependencies and run
+run = """
+curl -sSL https://install.python-poetry.org | python3 -
+export PATH="/root/.local/bin:$PATH"
+poetry install
+poetry run python chatbot.py
+"""
 disableGuessImports = true
-
-
 [nix]
 channel = "stable-24_05"
-
 [deployment]
-run = ["poetry run python chatbot.py"]
+run = """
+curl -sSL https://install.python-poetry.org | python3 -
+export PATH="/root/.local/bin:$PATH"
+poetry install
+poetry run python chatbot.py
+"""

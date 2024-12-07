@@ -121,6 +121,15 @@ class WalletPnlInput(BaseModel):
         description="The blockchain network to retrieve PnL data from",
         example="base")
 
+class GenerateArtInput(BaseModel):
+    """Input argument schema for generate art action."""
+
+    prompt: str = Field(
+        ..., 
+        description="Detailed text description of the artwork to generate",
+        example="A serene landscape with mountains, a lake, and a sunset"
+    )
+
 
 # Function definitions
 def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
@@ -378,6 +387,7 @@ def get_wallet_pnl(wallet: Wallet) -> str:
 
     except requests.exceptions.RequestException as e:
         return f"Error fetching wallet PnL: {str(e)}"
+
 
 
 def initialize_agent():
