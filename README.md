@@ -1,8 +1,8 @@
-##Introduction
+## Introduction
 
 AnkitAI Agent helps people directly interact with the blockchain, built on top of the Coinbase Developer Platform (CDP) and AgentKit.
 
-#Key Features
+# Key Features
 
 Autonomous execution: The agent thinks, decides, and acts onchain autonomously.
 Token deployement: Create and manage ERC-20 tokens.
