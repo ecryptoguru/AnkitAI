@@ -73,6 +73,22 @@ class TokenMetadataInput(BaseModel):
         example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     )
 
+class GetWalletTokensInput(BaseModel):
+    chain: str = Field(
+        ...,
+        description="Wallet address",
+        example="0x0dc74cabcfb00ab5fdeef60088685a71fef97003"
+    )
+
+class GetTokenDetailsInput(BaseModel):
+
+    token_address: str = Field(
+        ...,
+        description="The contract address of the ERC-20 token to retrieve details for",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    )
+
+
 class TokenPairsInput(BaseModel):
     token_address: str = Field(
         ..., 
@@ -157,6 +173,105 @@ def get_token_metadata(token_address: str) -> str:
 
     except requests.exceptions.RequestException as e:
         return f"Error fetching token metadata: {str(e)}"
+
+def get_wallet_tokens() -> str:
+    """
+    Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API.
+
+    Returns:
+        str: A message with the list of tokens and balances or an error message if unsuccessful
+    """
+    # Get the agent's wallet address
+    address_id = Wallet.default_address.address_id
+
+    # Determine the network dynamically based on the agent's current network ID
+    is_mainnet = agent_wallet.network_id in ["base", "base-mainnet"]
+    chain = "base" if is_mainnet else "base sepolia"
+
+    # API endpoint and headers
+    url = f"https://deep-index.moralis.io/api/v2.2/wallets/{address_id}/tokens"
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": MORALIS_API_KEY
+    }
+    params = {
+        "chain": chain
+    }
+
+    # Fetch wallet token balances
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        tokens = response.json().get("result", [])
+
+        # Format the output
+        if tokens:
+            token_list = "\n".join(
+                [
+                    f"Token: {token['name']} ({token['symbol']})\n"
+                    f"Balance: {token['balance_formatted']} {token['symbol']}\n"
+                    f"Contract Address: {token['token_address']}\n"
+                    f"Verified: {'Yes' if token['verified_contract'] else 'No'}\n"
+                    f"Price (USD): {token['usd_price'] or 'N/A'}\n"
+                    for token in tokens
+                ]
+            )
+            return f"Tokens held by {address_id}:\n{token_list}"
+        else:
+            return f"No tokens found for wallet {address_id}."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching wallet tokens: {str(e)}"
+
+def get_token_details(token_address: str) -> str:
+    """
+    Fetch detailed information about a specific ERC-20 token on the Base blockchain.
+    Automatically determines if the network is mainnet or testnet.
+
+    Args:
+        token_address (str): The address of the ERC-20 token.
+
+    Returns:
+        str: Information about the token or an error message if unsuccessful.
+    """
+    # Determine the network dynamically based on the agent's current network ID
+    is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
+    chain = "base" if is_mainnet else "base sepolia"
+
+    # API endpoint and headers
+    url = f"https://deep-index.moralis.io/api/v2.2/discovery/token"
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": MORALIS_API_KEY
+    }
+    params = {
+        "chain": chain,
+        "token_address": token_address
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        token_data = response.json()
+
+        # Format the output
+        token_info = (
+            f"Token Name: {token_data.get('token_name')}\n"
+            f"Symbol: {token_data.get('token_symbol')}\n"
+            f"Price (USD): {token_data.get('price_usd')}\n"
+            f"Market Cap: {token_data.get('market_cap')}\n"
+            f"Security Score: {token_data.get('security_score')}\n"
+            f"Token Age (days): {token_data.get('token_age_in_days')}\n"
+            f"On-Chain Strength Index: {token_data.get('on_chain_strength_index')}\n"
+            f"1-Day Holders Change: {token_data['holders_change'].get('1d')}\n"
+            f"1-Day Volume Change (USD): {token_data['volume_change_usd'].get('1d')}\n"
+            f"1-Month Price Change (%): {token_data['price_percent_change_usd'].get('1M')}\n"
+            f"Logo: {token_data.get('token_logo')}\n"
+        )
+        return token_info
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching token details: {str(e)}"
 
                 
 def get_token_pairs(token_address: str) -> str:
@@ -297,6 +412,31 @@ def initialize_agent():
         cdp_agentkit_wrapper=agentkit,
         args_schema=TokenMetadataInput,
         func=get_token_metadata,
+    )
+
+    # Get Wallet Tokens Tool
+    getWalletTokensTool = CdpTool(
+        name="get_wallet_tokens",
+        description="""
+        Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API. 
+        This action retrieves token balances, contract details, and optional USD price information.
+        """,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=GetWalletTokensInput,
+        func=get_wallet_tokens,
+    )
+
+    # Get Token Details Tool
+    getTokenDetailsTool = CdpTool(
+        name="get_token_details",
+        description="""
+        This tool fetches detailed information about an ERC-20 token on the Base blockchain, 
+        including key metrics like token name, symbol, price, market cap, security score, 
+        and historical performance indicators.
+        """,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=GetTokenDetailsInput,
+        func=get_token_details,
     )
 
     # Token Pairs Tool
