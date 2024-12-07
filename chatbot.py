@@ -78,6 +78,20 @@ class TokenPairsInput(BaseModel):
         example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     )
 
+class TrendingTokensInput(BaseModel):
+    """Input argument schema for fetching trending tokens."""
+    security_score: int = Field(
+        default=80,
+        description="Minimum security score for tokens",
+        ge=0,
+        le=100
+    )
+    min_market_cap: int = Field(
+        default=100000,
+        description="Minimum market cap for tokens",
+        ge=0
+    )
+
 # Function definitions
 def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
     """Deploy a new multi-token contract with the specified base URI."""
@@ -139,7 +153,7 @@ def get_token_pairs(wallet, token_address: str) -> str:
     """
     MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
     if not MORALIS_API_KEY:
-        return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY environment variable."
+        return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY          environment variable."
 
     is_mainnet = wallet.network_id in ["base", "base-mainnet"]
     chain = "base" if is_mainnet else "base sepolia"
@@ -166,8 +180,8 @@ def get_token_pairs(wallet, token_address: str) -> str:
                     f"24hr Price Change (%): {pair['usd_price_24hr_percent_change']}\n"
                     f"Liquidity (USD): {pair['liquidity_usd']}\n"
                     f"Exchange Address: {pair['exchange_address']}\n"
-                    f"Base Token: {pair['pair'][0]['token_name']} ({pair['pair'][0]['token_symbol']})\n"
-                    f"Quote Token: {pair['pair'][1]['token_name']} ({pair['pair'][1]['token_symbol']})\n"
+                    f"Base Token: {pair['pair'][0]['token_name']} ({pair['pair'][0]                    ['token_symbol']})\n"
+                    f"Quote Token: {pair['pair'][1]['token_name']} ({pair['pair'][1]                   ['token_symbol']})\n"
                     for pair in pairs
                 ]
             )
@@ -177,6 +191,51 @@ def get_token_pairs(wallet, token_address: str) -> str:
 
     except requests.exceptions.RequestException as e:
         return f"Error fetching token pairs: {str(e)}"
+
+def get_trending_tokens(security_score=80, min_market_cap=100000) -> str:
+        """
+        Fetch trending tokens with a minimum security score and market cap.
+
+        Args:
+            security_score (int): Minimum security score for tokens
+            min_market_cap (int): Minimum market cap for tokens
+
+        Returns:
+            str: Trending token information or an error message
+        """
+        MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+        url = "https://deep-index.moralis.io/api/v2.2/discovery/tokens/trending"
+        headers = {
+            "accept": "application/json",
+            "X-API-Key": MORALIS_API_KEY
+        }
+        params = {
+            "chain": "base",
+            "security_score": security_score,
+            "min_market_cap": min_market_cap
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            tokens = response.json()
+
+            # Format the output
+            token_info = "\n".join(
+                [
+                    f"Token Name: {token['token_name']} ({token['token_symbol']})\n"
+                    f"Price (USD): {token['price_usd']}\n"
+                    f"Market Cap: {token['market_cap']}\n"
+                    f"Security Score: {token['security_score']}\n"
+                    f"Logo: {token['token_logo']}\n"
+                    for token in tokens
+                ]
+            )
+            return f"Trending Tokens:\n{token_info}"
+
+        except requests.exceptions.RequestException as e:
+            return f"Error fetching trending tokens: {str(e)}"
+        
 
 def initialize_agent():
     """Initialize the agent with CDP Agentkit."""
@@ -192,7 +251,7 @@ def initialize_agent():
     # Configure CDP Agentkit Langchain Extension.
     values = {}
     if wallet_data is not None:
-        # If there is a persisted agentic wallet, load it and pass to the CDP Agentkit Wrapper.
+        # If there is a persisted agentic wallet, load it and pass to the CDP Agentkit     Wrapper.
         values = {"cdp_wallet_data": wallet_data}
 
     agentkit = CdpAgentkitWrapper(**values)
@@ -237,8 +296,24 @@ def initialize_agent():
         func=get_token_pairs,
     )
 
+    # Trending Tokens Tool
+    trendingTokensTool = CdpTool(
+        name="get_trending_tokens",
+        description="""
+        Discover trending tokens on the Base blockchain with optional 
+        filtering by security score and market capitalization.
+        Provides comprehensive information about top-performing tokens.
+        """,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=TrendingTokensInput,
+        func=get_trending_tokens,
+    )
+
+    
+
+
     # Add all tools to the tools list
-    tools.extend([deployMultiTokenTool, tokenMetadataTool, tokenPairsTool])
+    tools.extend([deployMultiTokenTool, tokenMetadataTool, tokenPairsTool,                 trendingTokensTool])
 
     # Store buffered conversation history in memory.
     memory = MemorySaver()
@@ -250,7 +325,7 @@ def initialize_agent():
         tools=tools,
         checkpointer=memory,
         state_modifier=
-        "You are a helpful agent that can interact onchain using the Coinbase Developer Platform Agentkit. You are empowered to interact onchain using your tools. If you ever need funds, you can request them from the faucet if you are on network ID `base-sepolia`. If not, you can provide your wallet details and request funds from the user. If someone asks you to do something you can't do with your currently available tools, you must say so, and encourage them to implement it themselves using the CDP SDK + Agentkit, recommend they go to docs.cdp.coinbase.com for more informaton. Be concise and helpful with your responses. Refrain from restating your tools' descriptions unless it is explicitly requested.",
+        "You are a helpful agent that can interact onchain using the Coinbase                  Developer Platform Agentkit. You are empowered to interact onchain using your          tools. If you ever need funds, you can request them from the faucet if you are         on network ID `base-sepolia`. If not, you can provide your wallet details and          request funds from the user. If someone asks you to do something you can't do          with your currently available tools, you must say so, and encourage them to            implement it themselves using the CDP SDK + Agentkit, recommend they go to             docs.cdp.coinbase.com for more informaton. Be concise and helpful with your            responses. Refrain from restating your tools' descriptions unless it is                explicitly requested. You are a specialized investment agent on the Base Layer 2 blockchain, designed to optimize an existing portfolio by analyzing and trading trending tokens.Your primary goal is to identify profitable tokens in the market, review wallet balances, and make calculated swap decisions to enhance the portfolio value.Follow these steps when making investment decisions: 1. Use trending data to identify promising tokens with potential profit.2. For each trending token, retrieve detailed information to evaluate its market cap, liquidity, and security. 3. Check the wallet balance to understand the available assets and decide on a safe percentage to invest. 4. Execute swaps to acquire trending tokens, ensuring the chosen amount aligns with profitability goals and balance management. Make data-driven decisions based on token performance, wallet balance, and profitability, while maximizing portfolio value with each trade. Use all available functions to analyze market trends, asset details, and wallet metrics to act with precision and efficiency"
     ), config
 
 # Autonomous Mode
@@ -262,7 +337,7 @@ def run_autonomous_mode(agent_executor, config, interval=10):
             # Provide instructions autonomously
             thought = (
                 "Be creative and do something interesting on the blockchain. "
-                "Choose an action or set of actions and execute it that highlights your abilities."
+                "Choose an action or set of actions and execute it that highlights                      your abilities."
             )
 
             # Run agent in autonomous mode
