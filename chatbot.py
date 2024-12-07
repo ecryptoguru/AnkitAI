@@ -17,6 +17,8 @@ from cdp import Wallet
 
 from twitter_langchain import (TwitterApiWrapper, TwitterToolkit)
 
+MORALIS_API_KEY = os.environ.get("MORALIS_API_KEY")
+
 # Configure a file to persist the agent's CDP MPC Wallet Data.
 wallet_data_file = "wallet_data.txt"
 
@@ -101,20 +103,28 @@ def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
     deployed_contract = wallet.deploy_multi_token(base_uri)
     result = deployed_contract.wait()
 
-    return f"Successfully deployed multi-token contract at address: {result.contract_address}"
+    return f"Successfully deployed multi-token contract at address:{result.contract_address}"
 
-def get_token_metadata(wallet, token_address: str) -> str:
+def get_token_metadata(token_address: str) -> str:
     """
     Fetch metadata for an ERC-20 token using the Moralis API.
     Automatically determines if the network is mainnet or testnet.
+
+    Args:
+        token_address (str): The address of the ERC-20 token
+
+    Returns:
+        str: A message with the token metadata or an error message if unsuccessful
     """
-    MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+    # Read the Moralis API key from the environment
     if not MORALIS_API_KEY:
         return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY environment variable."
 
-    is_mainnet = wallet.network_id in ["base", "base-mainnet"]
+    # Determine the network dynamically based on the agent's current network ID
+    is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
     chain = "base" if is_mainnet else "base sepolia"
 
+    # API endpoint and headers
     url = "https://deep-index.moralis.io/api/v2.2/erc20/metadata"
     headers = {
         "accept": "application/json",
@@ -125,6 +135,7 @@ def get_token_metadata(wallet, token_address: str) -> str:
         "addresses[0]": token_address
     }
 
+    # Fetch token metadata
     try:
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
@@ -136,10 +147,10 @@ def get_token_metadata(wallet, token_address: str) -> str:
                 f"Token Name: {token_data.get('name')}\n"
                 f"Symbol: {token_data.get('symbol')}\n"
                 f"Decimals: {token_data.get('decimals')}\n"
-                f"Total Supply: {token_data.get('total_supply_formatted', 'N/A')}\n"
+                f"Total Supply: {token_data.get('total_supply_formatted')}\n"
                 f"Contract Address: {token_data.get('address')}\n"
                 f"Verified: {token_data.get('verified_contract')}\n"
-                f"Logo URL: {token_data.get('logo', 'N/A')}\n"
+                f"Logo URL: {token_data.get('logo')}\n"
             )
         else:
             return "No metadata found for the provided token address."
@@ -147,15 +158,16 @@ def get_token_metadata(wallet, token_address: str) -> str:
     except requests.exceptions.RequestException as e:
         return f"Error fetching token metadata: {str(e)}"
 
-def get_token_pairs(wallet, token_address: str) -> str:
+                
+def get_token_pairs(token_address: str) -> str:
     """
     Fetch trading pairs for a specific ERC-20 token on the Base blockchain.
     """
-    MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+    
     if not MORALIS_API_KEY:
         return "Error: Moralis API key is missing. Please set the MORALIS_API_KEY          environment variable."
 
-    is_mainnet = wallet.network_id in ["base", "base-mainnet"]
+    is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
     chain = "base" if is_mainnet else "base sepolia"
 
     url = f"https://deep-index.moralis.io/api/v2.2/erc20/{token_address}/pairs"
