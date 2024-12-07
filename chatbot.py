@@ -113,6 +113,15 @@ class TrendingTokensInput(BaseModel):
                                 ge=0)
 
 
+class WalletPnlInput(BaseModel):
+    """Input argument schema for get wallet PnL action."""
+
+    chain: str = Field(
+        default="base",
+        description="The blockchain network to retrieve PnL data from",
+        example="base")
+
+
 # Function definitions
 def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
     """Deploy a new multi-token contract with the specified base URI."""
@@ -221,6 +230,9 @@ def get_wallet_nfts(wallet: Wallet) -> str:
     Fetch the raw response of NFTs held by the agent's wallet on the Base blockchain.
     Automatically determines if the network is mainnet or testnet.
 
+    Args:
+        wallet (Wallet): The wallet to retrieve NFTs for.
+
     Returns:
         str: Raw JSON response of NFTs or an error message if unsuccessful.
     """
@@ -328,6 +340,46 @@ def get_trending_tokens(security_score=80, min_market_cap=100000) -> str:
         return f"Error fetching trending tokens: {str(e)}"
 
 
+def get_wallet_pnl(wallet: Wallet) -> str:
+    """
+    Retrieve PnL information for the agent's wallet assets.
+
+    Args:
+    wallet (Wallet): The wallet to retrieve PnL data for.
+
+    Returns:
+        str: Wallet PnL data or an error message if unsuccessful
+    """
+    # Get the agent's wallet address
+    address_id = wallet.default_address.address_id
+
+    url = f"https://deep-index.moralis.io/api/v2.2/wallets/{address_id}/profitability"
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {"chain": "base"}
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        pnl_data = response.json().get("result", [])
+
+        # Format the output
+        if pnl_data:
+            pnl_info = "\n".join([
+                f"Token: {entry['name']} ({entry['symbol']})\n"
+                f"Total Invested: ${entry['total_usd_invested']}\n"
+                f"Realized Profit: ${entry['realized_profit_usd']}\n"
+                f"Avg Buy Price: ${entry['avg_buy_price_usd']}\n"
+                f"Total Tokens Bought: {entry['total_tokens_bought']}\n"
+                f"Logo: {entry['logo']}\n" for entry in pnl_data
+            ])
+            return f"Wallet PnL for {address_id}:\n{pnl_info}"
+        else:
+            return "No PnL data found for the wallet."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching wallet PnL: {str(e)}"
+
+
 def initialize_agent():
     """Initialize the agent with CDP Agentkit."""
     # Initialize LLM.
@@ -422,10 +474,19 @@ def initialize_agent():
         func=get_trending_tokens,
     )
 
+    # Trending Tokens Tool
+    walletPnlTool = CdpTool(
+        name="get_wallet_pnl",
+        description=WALLET_PNL_PROMPT,
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=WalletPnlInput,
+        func=get_wallet_pnl,
+    )
+
     # Add all tools to the tools list
     tools.extend([
         deployMultiTokenTool, tokenMetadataTool, tokenPairsTool,
-        tokenDetailsTool, walletNftsTool, trendingTokensTool
+        tokenDetailsTool, walletNftsTool, trendingTokensTool, walletPnlTool
     ])
 
     # Store buffered conversation history in memory.
@@ -438,7 +499,7 @@ def initialize_agent():
         tools=tools,
         checkpointer=memory,
         state_modifier=
-        "You are a helpful agent that can interact onchain using the Coinbase                  Developer Platform Agentkit. You are empowered to interact onchain using your          tools. If you ever need funds, you can request them from the faucet if you are         on network ID `base-sepolia`. If not, you can provide your wallet details and          request funds from the user. If someone asks you to do something you can't do          with your currently available tools, you must say so, and encourage them to            implement it themselves using the CDP SDK + Agentkit, recommend they go to             docs.cdp.coinbase.com for more informaton. Be concise and helpful with your            responses. Refrain from restating your tools' descriptions unless it is                explicitly requested. You are a specialized investment agent on the Base Layer 2 blockchain, designed to optimize an existing portfolio by analyzing and trading trending tokens.Your primary goal is to identify profitable tokens in the market, review wallet balances, and make calculated swap decisions to enhance the portfolio value.Follow these steps when making investment decisions: 1. Use trending data to identify promising tokens with potential profit.2. For each trending token, retrieve detailed information to evaluate its market cap, liquidity, and security. 3. Check the wallet balance to understand the available assets and decide on a safe percentage to invest. 4. Execute swaps to acquire trending tokens, ensuring the chosen amount aligns with profitability goals and balance management. Make data-driven decisions based on token performance, wallet balance, and profitability, while maximizing portfolio value with each trade. Use all available functions to analyze market trends, asset details, and wallet metrics to act with precision and efficiency"
+        "You are a helpful agent that can interact onchain using the Coinbase Developer Platform Agentkit. You are empowered to interact onchain using your tools. If you ever need funds, you can request them from the faucet if you are on network ID `base-sepolia`. If not, you can provide your wallet details and request funds from the user. If someone asks you to do something you can't do with your currently available tools, you must say so, and encourage them to mplement it themselves using the CDP SDK + Agentkit, recommend they go to docs.cdp.coinbase.com for more informaton. Be concise and helpful with your responses. Refrain from restating your tools' descriptions unless it is explicitly requested. You are a specialized investment agent on the Base Layer 2 blockchain, designed to optimize an existing portfolio by analyzing and trading trending tokens.Your primary goal is to identify profitable tokens in the market, review wallet balances, and make calculated swap decisions to enhance the portfolio value.Follow these steps when making investment decisions: 1. Use trending data to identify promising tokens with potential profit.2. For each trending token, retrieve detailed information to evaluate its market cap, liquidity, and security. 3. Check the wallet balance to understand the available assets and decide on a safe percentage to invest. 4. Execute swaps to acquire trending tokens, ensuring the chosen amount aligns with profitability goals and balance management. Make data-driven decisions based on token performance, wallet balance, and profitability, while maximizing portfolio value with each trade. Use all available functions to analyze market trends, asset details, and wallet metrics to act with precision and efficiency"
     ), config
 
 
@@ -451,7 +512,7 @@ def run_autonomous_mode(agent_executor, config, interval=10):
             # Provide instructions autonomously
             thought = (
                 "Be creative and do something interesting on the blockchain. "
-                "Choose an action or set of actions and execute it that highlights                      your abilities."
+                "Choose an action or set of actions and execute it that highlights your abilities."
             )
 
             # Run agent in autonomous mode
