@@ -42,11 +42,6 @@ Provides in-depth information including price, market cap, security score,
 holders change, volume changes, and price performance.
 """
 
-WALLET_TOKENS_PROMPT = """
-Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API. 
-This action retrieves token balances, contract details, and optional USD price information.
-"""
-
 TOKEN_PAIRS_PROMPT = """
 Retrieve trading pairs for a specific ERC-20 token on the Base blockchain.
 Returns detailed information about token trading pairs, including liquidity, 
@@ -64,52 +59,47 @@ Calculate and retrieve Profit and Loss (PnL) information for the agent's wallet 
 Provides detailed insights into token investments, realized profits, and average buy prices.
 """
 
+
 # Input Models
 class DeployMultiTokenInput(BaseModel):
     """Input argument schema for deploy multi-token contract action."""
     base_uri: str = Field(
         ...,
-        description="The base URI template for token metadata. Must contain {id} placeholder.",
+        description=
+        "The base URI template for token metadata. Must contain {id} placeholder.",
         example="https://example.com/metadata/{id}.json")
+
 
 class TokenMetadataInput(BaseModel):
     token_address: str = Field(
-        ..., 
-        description="Contract address of the ERC-20 token",
-        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-    )
-
-class WalletTokensInput(BaseModel):
-    chain: str = Field(
         ...,
-        description="Wallet address",
-        example="0x0dc74cabcfb00ab5fdeef60088685a71fef97003"
-    )
+        description="Contract address of the ERC-20 token",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+
 
 class TokenDetailsInput(BaseModel):
 
     token_address: str = Field(
         ...,
-        description="The contract address of the ERC-20 token to retrieve details for",
-        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-    )
+        description=
+        "The contract address of the ERC-20 token to retrieve details for",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+
 
 class WalletNftsInput(BaseModel):
-    """Input argument schema for get wallet NFTs action."""
+    """Input schema for get wallet NFTs action."""
 
-    token_address: str = Field(
-        ..., 
-        description="The wallet address to retrieve NFTs for",
-        example="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-    )
+    # No input parameters needed as this uses the agent's current wallet
+    pass
 
 
 class TokenPairsInput(BaseModel):
     token_address: str = Field(
-        ..., 
-        description="Contract address of the ERC-20 token to find trading pairs",
-        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-    )
+        ...,
+        description=
+        "Contract address of the ERC-20 token to find trading pairs",
+        example="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+
 
 class TrendingTokensInput(BaseModel):
     """Input argument schema for fetching trending tokens."""
@@ -117,13 +107,11 @@ class TrendingTokensInput(BaseModel):
         default=80,
         description="Minimum security score for tokens",
         ge=0,
-        le=100
-    )
-    min_market_cap: int = Field(
-        default=100000,
-        description="Minimum market cap for tokens",
-        ge=0
-    )
+        le=100)
+    min_market_cap: int = Field(default=100000,
+                                description="Minimum market cap for tokens",
+                                ge=0)
+
 
 # Function definitions
 def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
@@ -135,6 +123,7 @@ def deploy_multi_token(wallet: Wallet, base_uri: str) -> str:
     result = deployed_contract.wait()
 
     return f"Successfully deployed multi-token contract at address:{result.contract_address}"
+
 
 def get_token_metadata(token_address: str) -> str:
     """
@@ -157,14 +146,8 @@ def get_token_metadata(token_address: str) -> str:
 
     # API endpoint and headers
     url = "https://deep-index.moralis.io/api/v2.2/erc20/metadata"
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": MORALIS_API_KEY
-    }
-    params = {
-        "chain": chain,
-        "addresses[0]": token_address
-    }
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {"chain": chain, "addresses[0]": token_address}
 
     # Fetch token metadata
     try:
@@ -181,62 +164,13 @@ def get_token_metadata(token_address: str) -> str:
                 f"Total Supply: {token_data.get('total_supply_formatted')}\n"
                 f"Contract Address: {token_data.get('address')}\n"
                 f"Verified: {token_data.get('verified_contract')}\n"
-                f"Logo URL: {token_data.get('logo')}\n"
-            )
+                f"Logo URL: {token_data.get('logo')}\n")
         else:
             return "No metadata found for the provided token address."
 
     except requests.exceptions.RequestException as e:
         return f"Error fetching token metadata: {str(e)}"
 
-def get_wallet_tokens(token_address: str) -> str:
-    """
-    Fetch the list of ERC-20 tokens held by the agent's wallet using the Moralis API.
-
-    Returns:
-        str: A message with the list of tokens and balances or an error message if unsuccessful
-    """
-    # Get the agent's wallet address
-    address_id = token_address
-
-    # Determine the network dynamically based on the agent's current network ID
-    is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
-    chain = "base" if is_mainnet else "base sepolia"
-
-    # API endpoint and headers
-    url = f"https://deep-index.moralis.io/api/v2.2/wallets/{address_id}/tokens"
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": MORALIS_API_KEY
-    }
-    params = {
-        "chain": chain
-    }
-
-    # Fetch wallet token balances
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        tokens = response.json().get("result", [])
-
-        # Format the output
-        if tokens:
-            token_list = "\n".join(
-                [
-                    f"Token: {token['name']} ({token['symbol']})\n"
-                    f"Balance: {token['balance_formatted']} {token['symbol']}\n"
-                    f"Contract Address: {token['token_address']}\n"
-                    f"Verified: {'Yes' if token['verified_contract'] else 'No'}\n"
-                    f"Price (USD): {token['usd_price'] or 'N/A'}\n"
-                    for token in tokens
-                ]
-            )
-            return f"Tokens held by {address_id}:\n{token_list}"
-        else:
-            return f"No tokens found for wallet {address_id}."
-
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching wallet tokens: {str(e)}"
 
 def get_token_details(token_address: str) -> str:
     """
@@ -255,14 +189,8 @@ def get_token_details(token_address: str) -> str:
 
     # API endpoint and headers
     url = "https://deep-index.moralis.io/api/v2.2/discovery/token"
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": MORALIS_API_KEY
-    }
-    params = {
-        "chain": chain,
-        "token_address": token_address
-    }
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {"chain": chain, "token_address": token_address}
 
     try:
         response = requests.get(url, headers=headers, params=params)
@@ -281,14 +209,14 @@ def get_token_details(token_address: str) -> str:
             f"1-Day Holders Change: {token_data['holders_change'].get('1d')}\n"
             f"1-Day Volume Change (USD): {token_data['volume_change_usd'].get('1d')}\n"
             f"1-Month Price Change (%): {token_data['price_percent_change_usd'].get('1M')}\n"
-            f"Logo: {token_data.get('token_logo')}\n"
-        )
+            f"Logo: {token_data.get('token_logo')}\n")
         return token_info
 
     except requests.exceptions.RequestException as e:
         return f"Error fetching token details: {str(e)}"
 
-def get_wallet_nfts(token_address: str) -> str:
+
+def get_wallet_nfts(wallet: Wallet) -> str:
     """
     Fetch the raw response of NFTs held by the agent's wallet on the Base blockchain.
     Automatically determines if the network is mainnet or testnet.
@@ -297,7 +225,7 @@ def get_wallet_nfts(token_address: str) -> str:
         str: Raw JSON response of NFTs or an error message if unsuccessful.
     """
     # Get the agent's wallet address
-    wallet_address = token_address
+    wallet_address = wallet.default_address.address_id
 
     # Determine the network dynamically based on the agent's current network ID
     is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
@@ -305,15 +233,8 @@ def get_wallet_nfts(token_address: str) -> str:
 
     # API endpoint and headers
     url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/nft"
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": MORALIS_API_KEY
-    }
-    params = {
-        "chain": chain,
-        "format": "decimal",
-        "media_items": "false"
-    }
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {"chain": chain, "format": "decimal", "media_items": "false"}
 
     try:
         response = requests.get(url, headers=headers, params=params)
@@ -323,9 +244,9 @@ def get_wallet_nfts(token_address: str) -> str:
     except requests.exceptions.RequestException as e:
         return f"Error fetching wallet NFTs: {str(e)}"
 
-                
+
 def get_token_pairs(token_address: str) -> str:
-            """
+    """
             Fetch trading pairs for a specific ERC-20 token on the Base blockchain.
             Automatically determines if the network is mainnet or testnet.
 
@@ -335,49 +256,42 @@ def get_token_pairs(token_address: str) -> str:
             Returns:
                 str: Information about trading pairs or an error message if unsuccessful.
             """
-            # Determine the network dynamically based on the agent's current network ID
-            is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
-            chain = "base" if is_mainnet else "base sepolia"
+    # Determine the network dynamically based on the agent's current network ID
+    is_mainnet = Wallet.network_id in ["base", "base-mainnet"]
+    chain = "base" if is_mainnet else "base sepolia"
 
-            # API endpoint and headers
-            url = f"https://deep-index.moralis.io/api/v2.2/erc20/{token_address}/pairs"
-            headers = {
-                "accept": "application/json",
-                "X-API-Key": MORALIS_API_KEY
-            }
-            params = {
-                "chain": chain
-            }
+    # API endpoint and headers
+    url = f"https://deep-index.moralis.io/api/v2.2/erc20/{token_address}/pairs"
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {"chain": chain}
 
-            try:
-                response = requests.get(url, headers=headers, params=params)
-                response.raise_for_status()
-                pairs = response.json().get("pairs", [])
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        pairs = response.json().get("pairs", [])
 
-                # Format the output
-                if pairs:
-                    pairs_info = "\n".join(
-                        [
-                            f"Pair: {pair['pair_label']}\n"
-                            f"Price (USD): {pair['usd_price']}\n"
-                            f"24hr Price Change (%): {pair['usd_price_24hr_percent_change']}\n"
-                            f"Liquidity (USD): {pair['liquidity_usd']}\n"
-                            f"Exchange Address: {pair['exchange_address']}\n"
-                            f"Base Token: {pair['pair'][0]['token_name']} ({pair['pair'][0]['token_symbol']})\n"
-                            f"Quote Token: {pair['pair'][1]['token_name']} ({pair['pair'][1]['token_symbol']})\n"
-                            for pair in pairs
-                        ]
-                    )
-                    return f"Trading pairs for token {token_address}:\n{pairs_info}"
-                else:
-                    return f"No trading pairs found for token {token_address}."
+        # Format the output
+        if pairs:
+            pairs_info = "\n".join([
+                f"Pair: {pair['pair_label']}\n"
+                f"Price (USD): {pair['usd_price']}\n"
+                f"24hr Price Change (%): {pair['usd_price_24hr_percent_change']}\n"
+                f"Liquidity (USD): {pair['liquidity_usd']}\n"
+                f"Exchange Address: {pair['exchange_address']}\n"
+                f"Base Token: {pair['pair'][0]['token_name']} ({pair['pair'][0]['token_symbol']})\n"
+                f"Quote Token: {pair['pair'][1]['token_name']} ({pair['pair'][1]['token_symbol']})\n"
+                for pair in pairs
+            ])
+            return f"Trading pairs for token {token_address}:\n{pairs_info}"
+        else:
+            return f"No trading pairs found for token {token_address}."
 
-            except requests.exceptions.RequestException as e:
-                return f"Error fetching token pairs: {str(e)}"
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching token pairs: {str(e)}"
 
 
 def get_trending_tokens(security_score=80, min_market_cap=100000) -> str:
-        """
+    """
         Fetch trending tokens with a minimum security score and market cap.
 
         Args:
@@ -387,38 +301,32 @@ def get_trending_tokens(security_score=80, min_market_cap=100000) -> str:
         Returns:
             str: Trending token information or an error message
         """
-        url = "https://deep-index.moralis.io/api/v2.2/discovery/tokens/trending"
-        headers = {
-            "accept": "application/json",
-            "X-API-Key": MORALIS_API_KEY
-        }
-        params = {
-            "chain": "base",
-            "security_score": security_score,
-            "min_market_cap": min_market_cap
-        }
+    url = "https://deep-index.moralis.io/api/v2.2/discovery/tokens/trending"
+    headers = {"accept": "application/json", "X-API-Key": MORALIS_API_KEY}
+    params = {
+        "chain": "base",
+        "security_score": security_score,
+        "min_market_cap": min_market_cap
+    }
 
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            tokens = response.json()
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        tokens = response.json()
 
-            # Format the output
-            token_info = "\n".join(
-                [
-                    f"Token Name: {token['token_name']} ({token['token_symbol']})\n"
-                    f"Price (USD): {token['price_usd']}\n"
-                    f"Market Cap: {token['market_cap']}\n"
-                    f"Security Score: {token['security_score']}\n"
-                    f"Logo: {token['token_logo']}\n"
-                    for token in tokens
-                ]
-            )
-            return f"Trending Tokens:\n{token_info}"
+        # Format the output
+        token_info = "\n".join([
+            f"Token Name: {token['token_name']} ({token['token_symbol']})\n"
+            f"Price (USD): {token['price_usd']}\n"
+            f"Market Cap: {token['market_cap']}\n"
+            f"Security Score: {token['security_score']}\n"
+            f"Logo: {token['token_logo']}\n" for token in tokens
+        ])
+        return f"Trending Tokens:\n{token_info}"
 
-        except requests.exceptions.RequestException as e:
-            return f"Error fetching trending tokens: {str(e)}"
-        
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching trending tokens: {str(e)}"
+
 
 def initialize_agent():
     """Initialize the agent with CDP Agentkit."""
@@ -470,15 +378,6 @@ def initialize_agent():
         func=get_token_metadata,
     )
 
-    # Get Wallet Tokens Tool
-    walletTokensTool = CdpTool(
-        name="get_wallet_tokens",
-        description=WALLET_TOKENS_PROMPT,
-        cdp_agentkit_wrapper=agentkit,
-        args_schema=WalletTokensInput,
-        func=get_wallet_tokens,
-    )
-
     # Get Token Details Tool
     tokenDetailsTool = CdpTool(
         name="get_token_details",
@@ -495,7 +394,8 @@ def initialize_agent():
     # Get Wallet NFTs Tool
     walletNftsTool = CdpTool(
         name="get_wallet_nfts",
-        description="""Fetch the raw response of NFTs held by a wallet on the Base blockchain. 
+        description=
+        """Fetch the raw response of NFTs held by a wallet on the Base blockchain. 
         This action retrieves NFT information using the Moralis API, automatically 
         determining the correct network (mainnet or testnet) based on the wallet's network ID.
         """,
@@ -503,7 +403,7 @@ def initialize_agent():
         args_schema=WalletNftsInput,
         func=get_wallet_nfts,
     )
-    
+
     # Token Pairs Tool
     tokenPairsTool = CdpTool(
         name="get_token_pairs",
@@ -522,11 +422,11 @@ def initialize_agent():
         func=get_trending_tokens,
     )
 
-    
-
-
     # Add all tools to the tools list
-    tools.extend([deployMultiTokenTool, tokenMetadataTool, tokenPairsTool, walletTokensTool, tokenDetailsTool, walletNftsTool, trendingTokensTool])
+    tools.extend([
+        deployMultiTokenTool, tokenMetadataTool, tokenPairsTool,
+        tokenDetailsTool, walletNftsTool, trendingTokensTool
+    ])
 
     # Store buffered conversation history in memory.
     memory = MemorySaver()
@@ -540,6 +440,7 @@ def initialize_agent():
         state_modifier=
         "You are a helpful agent that can interact onchain using the Coinbase                  Developer Platform Agentkit. You are empowered to interact onchain using your          tools. If you ever need funds, you can request them from the faucet if you are         on network ID `base-sepolia`. If not, you can provide your wallet details and          request funds from the user. If someone asks you to do something you can't do          with your currently available tools, you must say so, and encourage them to            implement it themselves using the CDP SDK + Agentkit, recommend they go to             docs.cdp.coinbase.com for more informaton. Be concise and helpful with your            responses. Refrain from restating your tools' descriptions unless it is                explicitly requested. You are a specialized investment agent on the Base Layer 2 blockchain, designed to optimize an existing portfolio by analyzing and trading trending tokens.Your primary goal is to identify profitable tokens in the market, review wallet balances, and make calculated swap decisions to enhance the portfolio value.Follow these steps when making investment decisions: 1. Use trending data to identify promising tokens with potential profit.2. For each trending token, retrieve detailed information to evaluate its market cap, liquidity, and security. 3. Check the wallet balance to understand the available assets and decide on a safe percentage to invest. 4. Execute swaps to acquire trending tokens, ensuring the chosen amount aligns with profitability goals and balance management. Make data-driven decisions based on token performance, wallet balance, and profitability, while maximizing portfolio value with each trade. Use all available functions to analyze market trends, asset details, and wallet metrics to act with precision and efficiency"
     ), config
+
 
 # Autonomous Mode
 def run_autonomous_mode(agent_executor, config, interval=10):
@@ -625,4 +526,3 @@ def main():
 if __name__ == "__main__":
     print("Starting Agent...")
     main()
-
