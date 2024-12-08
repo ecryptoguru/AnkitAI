@@ -6,8 +6,13 @@ It can enable people acquire and manage base names easily and enhance user inter
 ## Key Features
 
 Autonomous execution: The agent thinks, decides, and acts onchain autonomously.
+
 Token deployement: Create and manage ERC-20 tokens.
+
 NFT Deployment: Deploy and mint NFTs.
+
 Asset transfers: Transfer assets between addresses without manual intervention.
+
 Balance checks: Keep tabs on wallet balances.
+
 ETH faucet requests: Automatically request testnet ETH when needed.
