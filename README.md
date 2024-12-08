@@ -16,3 +16,5 @@ Asset transfers: Transfer assets between addresses without manual intervention.
 Balance checks: Keep tabs on wallet balances.
 
 ETH faucet requests: Automatically request testnet ETH when needed.
+
+Autonomous Twitter Posts and Management
